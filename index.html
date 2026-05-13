@@ -76,7 +76,8 @@
     align-items: center;
     margin-bottom: 8px;
   }
-  input[type="number"] {
+  /* Using type="text" with inputmode for commas to display properly */
+  input.amount {
     flex: 1;
     height: 48px;
     padding: 0 12px;
@@ -91,7 +92,7 @@
     outline: none;
     transition: border-color 0.15s;
   }
-  input[type="number"]:focus { border-color: var(--accent); }
+  input.amount:focus { border-color: var(--accent); }
   select {
     width: 110px;
     height: 48px;
@@ -149,7 +150,7 @@
   <span class="rate-period">Rates effective Q2 2026</span>
 
   <div class="row">
-    <input type="number" id="from-amount" value="100000" step="any" />
+    <input type="text" inputmode="decimal" id="from-amount" class="amount" value="100,000" />
     <select id="from-cur"></select>
   </div>
 
@@ -160,7 +161,7 @@
   </div>
 
   <div class="row">
-    <input type="number" id="to-amount" step="any" />
+    <input type="text" inputmode="decimal" id="to-amount" class="amount" />
     <select id="to-cur"></select>
   </div>
 
@@ -216,11 +217,19 @@ codes.forEach(c => {
 fromCur.value = 'USD';
 toCur.value = 'EUR';
 
-function fmt(n) {
-  if (!isFinite(n)) return '—';
-  if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (Math.abs(n) >= 1) return n.toFixed(2);
-  return n.toFixed(4);
+// Strip commas and any other non-numeric chars (keep digits, dot, minus)
+function parseAmount(str) {
+  if (!str) return 0;
+  const cleaned = String(str).replace(/[^0-9.\-]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+// Format with commas. Salary numbers round to whole units, sub-1 values keep precision.
+function fmtAmount(n) {
+  if (!isFinite(n)) return '';
+  if (Math.abs(n) >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
 function fmtRate(n) {
@@ -239,17 +248,25 @@ let lastEdited = 'from';
 function recalc() {
   const from = fromCur.value, to = toCur.value;
   if (lastEdited === 'from') {
-    const v = parseFloat(fromAmt.value) || 0;
-    toAmt.value = fmt(convert(v, from, to));
+    const v = parseAmount(fromAmt.value);
+    toAmt.value = fmtAmount(convert(v, from, to));
   } else {
-    const v = parseFloat(toAmt.value) || 0;
-    fromAmt.value = fmt(convert(v, to, from));
+    const v = parseAmount(toAmt.value);
+    fromAmt.value = fmtAmount(convert(v, to, from));
   }
   info.textContent = `1 ${from} = ${fmtRate(convert(1, from, to))} ${to}`;
 }
 
+// Re-format the field the user just left (adds commas after they finish typing)
+function reformat(input) {
+  const v = parseAmount(input.value);
+  if (v) input.value = fmtAmount(v);
+}
+
 fromAmt.addEventListener('input', () => { lastEdited = 'from'; recalc(); });
 toAmt.addEventListener('input', () => { lastEdited = 'to'; recalc(); });
+fromAmt.addEventListener('blur', () => reformat(fromAmt));
+toAmt.addEventListener('blur', () => reformat(toAmt));
 fromCur.addEventListener('change', recalc);
 toCur.addEventListener('change', recalc);
 
